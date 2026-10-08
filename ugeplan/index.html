@@ -51,8 +51,13 @@ h1 { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.01em; }
 .boy[data-boy="Valdemar"] { --c: var(--valdemar); }
 .boy[data-boy="Gustav"] { --c: var(--gustav); }
 .boy header { padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--line); }
-.boy .row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.boy .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .boy h2 { font-size: 1.4rem; color: var(--c); }
+.who-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.avatar { width: 52px; height: 52px; flex: none; border-radius: 50%; border: 3px solid var(--c); background: var(--bg); color: var(--c); font: 800 1.3rem var(--display); display: grid; place-items: center; overflow: hidden; padding: 0; position: relative; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+button.avatar { cursor: pointer; }
+button.avatar .cam { position: absolute; inset: auto 0 0 0; background: var(--c); color: var(--done-fg); font: 600 0.6rem var(--body); line-height: 1.5; text-transform: uppercase; letter-spacing: .04em; }
 .boy h2 .age { font: 500 0.9rem var(--body); color: var(--muted); }
 .boy .count { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 600; }
 .bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
@@ -140,6 +145,7 @@ form.add button { grid-column: 1 / -1; padding: 12px; border-radius: 10px; borde
   </details>
 </div>
 
+<input type="file" id="photo-input" accept="image/*" hidden>
 <script>
 (function () {
   // Oldest first; age is computed from the birthday so it stays right
@@ -155,6 +161,7 @@ form.add button { grid-column: 1 / -1; padding: 12px; border-radius: 10px; borde
   let db = null, canWrite = false, canEditTasks = false;
   let tasks = [];          // [{id, title, boy, times}]
   let checks = new Set();  // "<taskId>_<slot>" for the shown week
+  let photos = {};         // boy -> data URL
   let unsubChecks = null;
   let weekOffset = 0;
   let filter = "Alle";
@@ -205,7 +212,20 @@ form.add button { grid-column: 1 / -1; padding: 12px; border-radius: 10px; borde
       const c = document.createElement("span"); c.className = "count";
       c.textContent = total && done === total ? "" : done + " af " + total;
       if (total && done === total) { c.className = "allDone"; c.textContent = "Alt klaret!"; }
-      row.append(h, c);
+      const av = document.createElement(canEditTasks ? "button" : "div");
+      av.className = "avatar";
+      if (photos[boy]) { const img = document.createElement("img"); img.src = photos[boy]; img.alt = boy; av.append(img); }
+      else av.textContent = boy[0];
+      if (canEditTasks) {
+        av.type = "button";
+        av.setAttribute("aria-label", (photos[boy] ? "Skift billede af " : "Tilføj billede af ") + boy);
+        const cam = document.createElement("span"); cam.className = "cam"; cam.textContent = photos[boy] ? "Skift" : "Billede";
+        av.append(cam);
+        av.addEventListener("click", () => { photoFor = boy; $("photo-input").value = ""; $("photo-input").click(); });
+      }
+      const whoRow = document.createElement("div"); whoRow.className = "who-row";
+      whoRow.append(av, h);
+      row.append(whoRow, c);
       const bar = document.createElement("div"); bar.className = "bar";
       const fill = document.createElement("i"); fill.style.width = total ? (100 * done / total) + "%" : "0";
       bar.append(fill);
@@ -296,6 +316,27 @@ form.add button { grid-column: 1 / -1; padding: 12px; border-radius: 10px; borde
     }, () => setStatus("Forbindelsen blev afbrudt. Genindlæs siden."));
   }
 
+  // Parent picks a photo; it is cropped to a centred square, shrunk and stored in the shared db
+  let photoFor = null;
+  $("photo-input").addEventListener("change", async () => {
+    const file = $("photo-input").files[0];
+    if (!file || !photoFor || !db) return;
+    const boy = photoFor;
+    try {
+      const url = URL.createObjectURL(file);
+      const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+      const side = Math.min(img.naturalWidth, img.naturalHeight);
+      const sx = (img.naturalWidth - side) / 2;
+      const sy = Math.max(0, (img.naturalHeight - side) / 2 - side * 0.1); // lean up toward the face
+      const cv = document.createElement("canvas"); cv.width = cv.height = 192;
+      cv.getContext("2d").drawImage(img, sx, sy, side, side, 0, 0, 192, 192);
+      URL.revokeObjectURL(url);
+      const data = cv.toDataURL("image/jpeg", 0.82);
+      photos[boy] = data; render();
+      await db.doc("photos/" + boy).set({ img: data, at: new Date().toISOString() });
+    } catch (e) { setStatus("Billedet kunne ikke gemmes. Prøv et andet billede."); }
+  });
+
   $("prev").addEventListener("click", () => { weekOffset--; render(); if (db) subscribeWeek(); });
   $("next").addEventListener("click", () => { weekOffset++; render(); if (db) subscribeWeek(); });
   $("today").addEventListener("click", () => { weekOffset = 0; render(); if (db) subscribeWeek(); });
@@ -339,6 +380,11 @@ form.add button { grid-column: 1 / -1; padding: 12px; border-radius: 10px; borde
       else if (canWrite) setStatus("");
       render();
     }, () => setStatus("Forbindelsen blev afbrudt. Genindlæs siden."));
+    db.collection("photos").onSnapshot((snap) => {
+      photos = {};
+      snap.docs.forEach((d) => { const x = d.data(); if (BOYS.includes(d.id) && typeof x.img === "string" && x.img.startsWith("data:image/")) photos[d.id] = x.img; });
+      render();
+    }, () => {});
     subscribeWeek();
   })();
 })();
