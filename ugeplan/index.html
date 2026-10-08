@@ -53,6 +53,7 @@ h1 { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.01em; }
 .boy header { padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--line); }
 .boy .row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .boy h2 { font-size: 1.4rem; color: var(--c); }
+.boy h2 .age { font: 500 0.9rem var(--body); color: var(--muted); }
 .boy .count { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 600; }
 .bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
 .bar > i { display: block; height: 100%; width: 0; background: var(--c); border-radius: 99px; transition: width .3s ease; }
@@ -111,9 +112,9 @@ form.add button { grid-column: 1 / -1; padding: 12px; border-radius: 10px; borde
 
   <div class="tabs" role="group" aria-label="Vis opgaver for">
     <button class="tab" data-f="Alle" aria-pressed="true">Alle</button>
-    <button class="tab" data-f="Emil" aria-pressed="false">Emil</button>
     <button class="tab" data-f="Valdemar" aria-pressed="false">Valdemar</button>
     <button class="tab" data-f="Gustav" aria-pressed="false">Gustav</button>
+    <button class="tab" data-f="Emil" aria-pressed="false">Emil</button>
   </div>
 
   <p class="note" id="status">Henter opgaverne&hellip; Når de er hentet, står hver drengs opgaver her med en boks per gang, opgaven skal laves.</p>
@@ -128,7 +129,7 @@ form.add button { grid-column: 1 / -1; padding: 12px; border-radius: 10px; borde
         <input id="f-title" required maxlength="60" placeholder="F.eks. Gå tur med hunden">
       </label>
       <label>Hvem
-        <select id="f-boy"><option>Emil</option><option>Valdemar</option><option>Gustav</option></select>
+        <select id="f-boy"><option>Valdemar</option><option>Gustav</option><option>Emil</option></select>
       </label>
       <label>Gange pr. uge
         <select id="f-times"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>7</option></select>
@@ -141,7 +142,13 @@ form.add button { grid-column: 1 / -1; padding: 12px; border-radius: 10px; borde
 
 <script>
 (function () {
-  const BOYS = ["Emil", "Valdemar", "Gustav"];
+  // Oldest first; age is computed from the birthday so it stays right
+  const BIRTHDAYS = { Valdemar: [2011, 7, 16], Gustav: [2013, 1, 15], Emil: [2016, 11, 11] };
+  const BOYS = Object.keys(BIRTHDAYS);
+  function age(boy) {
+    const [y, m, d] = BIRTHDAYS[boy], now = new Date();
+    return now.getFullYear() - y - ((now.getMonth() + 1 < m || (now.getMonth() + 1 === m && now.getDate() < d)) ? 1 : 0);
+  }
   const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>';
   const $ = (id) => document.getElementById(id);
 
@@ -193,6 +200,8 @@ form.add button { grid-column: 1 / -1; padding: 12px; border-radius: 10px; borde
       const head = document.createElement("header");
       const row = document.createElement("div"); row.className = "row";
       const h = document.createElement("h2"); h.textContent = boy;
+      const a = document.createElement("span"); a.className = "age"; a.textContent = age(boy) + " år";
+      h.append(" ", a);
       const c = document.createElement("span"); c.className = "count";
       c.textContent = total && done === total ? "" : done + " af " + total;
       if (total && done === total) { c.className = "allDone"; c.textContent = "Alt klaret!"; }
